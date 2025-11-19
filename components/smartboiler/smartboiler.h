@@ -11,6 +11,7 @@
 #include "esphome/components/select/select.h"
 #include "esphome/components/climate/climate.h"
 #include "esphome/components/number/number.h"
+#include "esphome/components/button/button.h"
 #include "SBProtocol.h"
 
 #define TIME_ADJUSTMENT_THRESHOLD 30
@@ -29,6 +30,7 @@ static const std::string MODE_MANUAL = "MANUAL";
 class SmartBoilerModeSelect;
 class SmartBoilerThermostat;
 class SmartBoilerPinInput;
+class SmartBoilerSyncTimeButton;
 
 enum class ConnectionState { DISCONNECTED, AUTHENTICATING, CONNECTED, NEED_PIN };
 
@@ -59,6 +61,7 @@ class SmartBoiler : public PollingComponent,
   void set_version(text_sensor::TextSensor *t) { version_ = t; }
   void set_name(text_sensor::TextSensor *t) { name_ = t; }
   void set_anode_voltage(sensor::Sensor *s) { anode_voltage_sensor_ = s; }
+  void sync_time_now();
 
  protected:
   void set_uid(const std::string &uid) { this->uid_ = uid; }
@@ -116,6 +119,7 @@ class SmartBoiler : public PollingComponent,
   friend class SmartBoilerModeSelect;
   friend class SmartBoilerThermostat;
   friend class SmartBoilerPinInput;
+  friend class SmartBoilerSyncTimeButton;
 
 private:
   bool isHdoEnabled = false;
@@ -142,6 +146,11 @@ class SmartBoilerThermostat : public esphome::climate::Climate, public esphome::
 class SmartBoilerPinInput : public esphome::number::Number, public esphome::Parented<SmartBoiler> {
  protected:
   virtual void control(float value) override;
+};
+
+class SmartBoilerSyncTimeButton : public esphome::button::Button, public esphome::Parented<SmartBoiler> {
+ protected:
+  virtual void press_action() override;
 };
 
 }  // namespace sb
