@@ -3,7 +3,7 @@ import esphome.config_validation as cv
 from esphome.components import (
     ble_client, sensor,
     select, binary_sensor,
-    climate, number, text_sensor, button
+    climate, number, text_sensor
 )
 from esphome.const import (
     CONF_ID,CONF_STATE, CONF_PIN,
@@ -17,7 +17,7 @@ from esphome.const import (
     STATE_CLASS_MEASUREMENT
 )
 
-AUTO_LOAD = ["sensor", "binary_sensor", "select", "climate", "esp32_ble_tracker", "number", "text_sensor", "button"]
+AUTO_LOAD = ["sensor", "binary_sensor", "select", "climate", "esp32_ble_tracker", "number", "text_sensor"]
 MULTI_CONF = 3
 
 CONF_TEMP1 = 'temp1'
@@ -29,7 +29,6 @@ CONF_THERMOSTAT = 'thermostat'
 CONF_CONSUMPTION = 'consumption'
 CONF_BNAME = "b_name"
 CONF_ANODE_VOLTAGE = 'anode_voltage'
-CONF_SYNC_TIME = 'sync_time_button'
 
 smartboiler_controller_ns = cg.esphome_ns.namespace('sb')
 
@@ -39,7 +38,6 @@ SmartBoiler = smartboiler_controller_ns.class_(
 SmartBoilerModeSelect = smartboiler_controller_ns.class_('SmartBoilerModeSelect', select.Select)
 SmartBoilerThermostat = smartboiler_controller_ns.class_('SmartBoilerThermostat', climate.Climate)
 SmartBoilerPinInput = smartboiler_controller_ns.class_('SmartBoilerPinInput', number.Number)
-SmartBoilerSyncTimeButton = smartboiler_controller_ns.class_('SmartBoilerSyncTimeButton', button.Button)
 
 CONFIG_SCHEMA = cv.polling_component_schema('600s').extend({
     cv.GenerateID(): cv.declare_id(SmartBoiler),
@@ -70,9 +68,6 @@ CONFIG_SCHEMA = cv.polling_component_schema('600s').extend({
             icon=ICON_FLASH,
             accuracy_decimals=3,
             state_class=STATE_CLASS_MEASUREMENT).extend(),
-    cv.Optional(CONF_SYNC_TIME, {"name": "Sync Time", "icon": "mdi:clock-check"}): button.button_schema(SmartBoilerSyncTimeButton).extend({
-        cv.GenerateID(): cv.declare_id(SmartBoilerSyncTimeButton),
-    }),
 }).extend(ble_client.BLE_CLIENT_SCHEMA)
 
 async def to_code(config):
@@ -135,8 +130,3 @@ async def to_code(config):
         name = cg.new_Pvariable(config[CONF_BNAME][CONF_ID])
         await text_sensor.register_text_sensor(name, config[CONF_BNAME])
         cg.add(var.set_name(name))
-
-    if CONF_SYNC_TIME in config:
-        btn = cg.new_Pvariable(config[CONF_SYNC_TIME][CONF_ID])
-        await button.register_button(btn, config[CONF_SYNC_TIME])
-        await cg.register_parented(btn, var)

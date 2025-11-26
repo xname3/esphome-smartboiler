@@ -114,7 +114,6 @@ void SmartBoiler::on_set_time(int64_t time_adjustment) {
   ESP_LOGI(TAG, "Adjusting time by: %ld seconds", time_adjustment);
   auto cmd = SBProtocolRequest(SBC_PACKET_HOME_TIME, this->mPacketUid++);
   cmd.write_le(uint64_t(time_adjustment));
-  this->enqueue_command_(cmd);
 }
 #endif
 
@@ -606,48 +605,6 @@ std::string SmartBoiler::convert_mode_to_action(const uint8_t mode) {
       break;
   }
   return MODE_ANTIFREEZE;
-}
-
-#ifdef USE_TIME
-void SmartBoiler::sync_time_now() {
-  ESP_LOGI(TAG, "Manual time synchronization requested");
-  
-  if (esphome_time != nullptr) {
-    auto current_time = esphome_time->now();
-    if (current_time.is_valid()) {
-      ESP_LOGI(TAG, "Synchronizing time from ESPHome: %04d-%02d-%02d %02d:%02d:%02d", 
-               current_time.year, current_time.month, current_time.day_of_month,
-               current_time.hour, current_time.minute, current_time.second);
-      
-      // Calculate current time in seconds since Monday 00:00:00
-      int current_day_of_week = current_time.day_of_week; // 1=Sunday, 2=Monday, etc.
-      int days_since_monday = (current_day_of_week == 1) ? 6 : (current_day_of_week - 2);
-      int current_seconds_since_monday = (days_since_monday * 24 * 3600) + 
-                                        (current_time.hour * 3600) + 
-                                        (current_time.minute * 60) + 
-                                        current_time.second;
-      
-      // Send the absolute time (not difference) to force sync
-      ESP_LOGI(TAG, "Sending time sync command: %d seconds since Monday", current_seconds_since_monday);
-      auto cmd = SBProtocolRequest(SBC_PACKET_HOME_TIME, this->mPacketUid++);
-      cmd.write_le(uint64_t(current_seconds_since_monday));
-      this->enqueue_command_(cmd);
-    } else {
-      ESP_LOGW(TAG, "Cannot sync time - ESPHome time not available");
-    }
-  } else {
-    ESP_LOGW(TAG, "Cannot sync time - time component not found");
-  }
-}
-#endif
-
-void SmartBoilerSyncTimeButton::press_action() {
-#ifdef USE_TIME
-  ESP_LOGI(TAG, "Sync Time button pressed");
-  get_parent()->sync_time_now();
-#else
-  ESP_LOGW(TAG, "Time synchronization not available - time component not compiled");
-#endif
 }
 
 }  // namespace sb
