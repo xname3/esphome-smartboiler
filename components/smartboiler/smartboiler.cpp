@@ -30,7 +30,9 @@ static const int COMMAND_DELAY = 100;
 
 void SmartBoiler::restore_state_() {
   SavedSmartBoilerSettings recovered{};
-  this->pref_ = global_preferences->make_preference<SavedSmartBoilerSettings>(this->thermostat_->get_object_id_hash());
+  // Use a fixed hash for preferences to avoid dependency on other components
+  // 0x5B011E00 = SmartBoiler
+  this->pref_ = global_preferences->make_preference<SavedSmartBoilerSettings>(0x5B011E00);
   bool restored = this->pref_.load(&recovered);
   if (restored) {
     this->uid_ = recovered.uid;
@@ -114,6 +116,7 @@ void SmartBoiler::on_set_time(int64_t time_adjustment) {
   ESP_LOGI(TAG, "Adjusting time by: %ld seconds", time_adjustment);
   auto cmd = SBProtocolRequest(SBC_PACKET_HOME_TIME, this->mPacketUid++);
   cmd.write_le(uint64_t(time_adjustment));
+  this->enqueue_command_(cmd);
 }
 #endif
 
