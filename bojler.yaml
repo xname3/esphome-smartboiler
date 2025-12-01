@@ -67,13 +67,17 @@ wifi:
   on_disconnect:
     - logger.log: "WiFi disconnected!"
 
-# BLE tracker with very conservative settings
+time:
+  - platform: sntp
+    id: sntp_time
+
+# BLE tracker with conservative but functional settings
 esp32_ble_tracker:
   scan_parameters:
-    interval: 2000ms    # Very long interval - scan only every 2 seconds
-    window: 20ms        # Very short window - minimal radio time
-    active: false
-    continuous: false   # Only scan when needed
+    interval: 2000ms    # Scan every 2 seconds
+    window: 200ms       # Scan for 200ms (10% duty cycle) - better chance to catch advertisement
+    active: true        # Active scan to get more info
+    continuous: true    # Keep scanning until found
   
 # BLE client for boiler
 ble_client:
@@ -90,6 +94,7 @@ smartboiler:
   id: boiler_ctrl
   ble_client_id: ble_boiler
   update_interval: 600s
+  time_id: sntp_time
   temp1:
     name: "Temperature 1"
   temp2:

@@ -11,6 +11,7 @@
 #include "esphome/components/select/select.h"
 #include "esphome/components/climate/climate.h"
 #include "esphome/components/number/number.h"
+#include "esphome/components/time/real_time_clock.h"
 #include "SBProtocol.h"
 
 #define TIME_ADJUSTMENT_THRESHOLD 30
@@ -59,6 +60,7 @@ class SmartBoiler : public PollingComponent,
   void set_version(text_sensor::TextSensor *t) { version_ = t; }
   void set_name(text_sensor::TextSensor *t) { name_ = t; }
   void set_anode_voltage(sensor::Sensor *s) { anode_voltage_sensor_ = s; }
+  void set_time_id(time::RealTimeClock *t) { time_ = t; }
 
  protected:
   void set_uid(const std::string &uid) { this->uid_ = uid; }
@@ -99,8 +101,10 @@ class SmartBoiler : public PollingComponent,
   // queue for sent command to later pair with responses
   std::vector<SBProtocolRequest> sent_queue_;
 
-  sensor::Sensor *temperature_sensor_1_sensor_ = nullptr;
-  sensor::Sensor *temperature_sensor_2_sensor_ = nullptr;
+  time::RealTimeClock *time_{nullptr};
+
+  sensor::Sensor *temperature_sensor_1_sensor_{nullptr};
+  sensor::Sensor *temperature_sensor_2_sensor_{nullptr};
   sensor::Sensor *consumption_sensor_ = nullptr;
   sensor::Sensor *anode_voltage_sensor_ = nullptr;
 

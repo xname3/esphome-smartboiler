@@ -3,7 +3,8 @@ import esphome.config_validation as cv
 from esphome.components import (
     ble_client, sensor,
     select, binary_sensor,
-    climate, number, text_sensor
+    climate, number, text_sensor,
+    time
 )
 from esphome.const import (
     CONF_ID,CONF_STATE, CONF_PIN,
@@ -14,10 +15,11 @@ from esphome.const import (
     STATE_CLASS_TOTAL_INCREASING,
     DEVICE_CLASS_ENERGY,
     UNIT_VOLT,
-    STATE_CLASS_MEASUREMENT
+    STATE_CLASS_MEASUREMENT,
+    CONF_TIME_ID
 )
 
-AUTO_LOAD = ["sensor", "binary_sensor", "select", "climate", "esp32_ble_tracker", "number", "text_sensor"]
+AUTO_LOAD = ["sensor", "binary_sensor", "select", "climate", "esp32_ble_tracker", "number", "text_sensor", "time"]
 MULTI_CONF = 3
 
 CONF_TEMP1 = 'temp1'
@@ -43,7 +45,7 @@ CONFIG_SCHEMA = cv.polling_component_schema('600s').extend({
     cv.GenerateID(): cv.declare_id(SmartBoiler),
     cv.Optional(CONF_TEMP1): sensor.sensor_schema(unit_of_measurement=UNIT_CELSIUS, icon=ICON_THERMOMETER, accuracy_decimals=1).extend(),
     cv.Optional(CONF_TEMP2): sensor.sensor_schema(unit_of_measurement=UNIT_CELSIUS, icon=ICON_THERMOMETER, accuracy_decimals=1).extend(),
-    cv.Optional(CONF_HDO_LOW_TARIFF, {"name": "HDO"}): binary_sensor.binary_sensor_schema().extend(),
+    cv.Optional(CONF_HDO_LOW_TARIFF, {"name": "Low Tariff"}): binary_sensor.binary_sensor_schema().extend(),
     cv.Optional(CONF_HEAT_ON, {"name":"Heating", "icon": "mdi:radiator"}): binary_sensor.binary_sensor_schema().extend(),
     cv.Optional(CONF_MODE): select.select_schema(SmartBoilerModeSelect).extend({
         cv.GenerateID(): cv.declare_id(SmartBoilerModeSelect),
@@ -54,10 +56,10 @@ CONFIG_SCHEMA = cv.polling_component_schema('600s').extend({
     cv.Optional(CONF_PIN, {"name": "Pairing PIN", "mode": "BOX", "icon": "mdi:lock"}): number.number_schema(number.Number).extend({
         cv.GenerateID(): cv.declare_id(SmartBoilerPinInput),
     }),
-    cv.Optional(CONF_STATE, {"name": "State", "icon": "mdi:connection" }): text_sensor.text_sensor_schema().extend(),
-    cv.Optional(CONF_VERSION, {"name": "Version", "entity_category": ENTITY_CATEGORY_DIAGNOSTIC }): text_sensor.text_sensor_schema().extend(),
-    cv.Optional(CONF_BNAME, {"name": "Name" }): text_sensor.text_sensor_schema().extend(),
-    cv.Optional(CONF_CONSUMPTION, {"name": "Energy"}): sensor.sensor_schema(
+    cv.Optional(CONF_STATE, {"name": "Connection State", "icon": "mdi:connection" }): text_sensor.text_sensor_schema().extend(),
+    cv.Optional(CONF_VERSION, {"name": "Firmware Version", "entity_category": ENTITY_CATEGORY_DIAGNOSTIC }): text_sensor.text_sensor_schema().extend(),
+    cv.Optional(CONF_BNAME, {"name": "Device Name" }): text_sensor.text_sensor_schema().extend(),
+    cv.Optional(CONF_CONSUMPTION, {"name": "Energy Consumption"}): sensor.sensor_schema(
             unit_of_measurement=UNIT_KILOWATT_HOURS,
             icon=ICON_FLASH,
             accuracy_decimals=3,
@@ -68,12 +70,17 @@ CONFIG_SCHEMA = cv.polling_component_schema('600s').extend({
             icon=ICON_FLASH,
             accuracy_decimals=3,
             state_class=STATE_CLASS_MEASUREMENT).extend(),
+    cv.Optional(CONF_TIME_ID): cv.use_id(time.RealTimeClock),
 }).extend(ble_client.BLE_CLIENT_SCHEMA)
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await ble_client.register_ble_node(var, config)
+
+    if CONF_TIME_ID in config:
+        time_ = await cg.get_variable(config[CONF_TIME_ID])
+        cg.add(var.set_time_id(time_))
 
     if CONF_ANODE_VOLTAGE in config:
         sens = await sensor.new_sensor(config[CONF_ANODE_VOLTAGE])
