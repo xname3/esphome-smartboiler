@@ -1,0 +1,123 @@
+substitutions:
+  name: "smartboiler"
+  friendly_name: "Bojler"
+
+esphome:
+  name: "${name}"
+  friendly_name: "${friendly_name}"
+  # Delay BLE operations until after WiFi connects
+  on_boot:
+    priority: -100  # Run after everything else
+    then:
+      - logger.log: "Boot complete, waiting for WiFi stability..."
+      - delay: 30s  # Give WiFi 30 seconds to stabilize
+      - logger.log: "WiFi should be stable now, BLE client will connect"
+
+esp32:
+  board: fm-devkit
+  flash_size: 4MB
+  variant: esp32
+  framework:
+    type: esp-idf
+    version: recommended
+    sdkconfig_options:
+      # WiFi/BLE coexistence - let WiFi dominate
+      CONFIG_ESP32_WIFI_SW_COEXIST_ENABLE: "y"
+      CONFIG_ESP_COEX_SW_COEXIST_ENABLE: "y"
+      CONFIG_SW_COEXIST_PREFERENCE_WIFI: "y"  # Prioritize WiFi over BLE
+      # Increase WiFi buffers significantly
+      CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM: "16"
+      CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM: "64"
+      CONFIG_ESP32_WIFI_DYNAMIC_TX_BUFFER_NUM: "64"
+      # Increase WiFi task priority
+      CONFIG_ESP32_WIFI_TASK_PINNED_TO_CORE_0: "y"
+      # Increase connection timeout
+      CONFIG_ESP_WIFI_STA_DISCONNECTED_PM_ENABLE: "n"
+
+logger:
+  baud_rate: 115200
+  level: DEBUG
+
+api:
+  encryption:
+    key: "2emnoaBbZD83wHUMqaQtBf9EvOSgRIFzkNcc90AKIV0="
+
+ota:
+  - platform: esphome
+    password: "smartboiler"
+
+wifi:
+  ssid: "DaK"
+  password: "Orchidea"
+  # Fast connect skips scanning
+  fast_connect: true
+  # Max power
+  output_power: 20dB
+  # Enable power save LIGHT mode - helps with coexistence
+  power_save_mode: light
+  # Static IP configuration
+  manual_ip:
+    static_ip: 192.168.1.187
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+  
+  on_connect:
+    - logger.log: "WiFi connected successfully!"
+  on_disconnect:
+    - logger.log: "WiFi disconnected!"
+
+time:
+  - platform: sntp
+    id: sntp_time
+
+# BLE tracker with conservative but functional settings
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 2000ms    # Scan every 2 seconds
+    window: 200ms       # Scan for 200ms (10% duty cycle) - better chance to catch advertisement
+    active: true        # Active scan to get more info
+    continuous: true    # Keep scanning until found
+  
+# BLE client for boiler
+ble_client:
+  #- mac_address: D0:EF:76:57:E8:84
+  - mac_address: F0:F9:2E:BF:CB:D4
+    id: ble_boiler
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [smartboiler]
+
+smartboiler:
+  id: boiler_ctrl
+  ble_client_id: ble_boiler
+  update_interval: 600s
+  time_id: sntp_time
+  temp1:
+    name: "Temperature 1"
+  temp2:
+    name: "Temperature 2"
+  mode:
+    name: "Mode"
+  thermostat:
+    name: "Thermostat"
+  heat_on:
+    name: "Heating"
+  hdo_low_tariff:
+    name: "HDO Low Tariff"
+  pin:
+    name: "Pairing PIN"
+  state:
+    name: "Connection State"
+  version:
+    name: "Firmware Version"
+  consumption:
+    name: "Energy Consumption"
+  anode_voltage:
+    name: "Anode Voltage"
+
+# Web server for debugging
+web_server:
+  port: 80
