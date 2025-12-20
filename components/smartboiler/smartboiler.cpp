@@ -103,10 +103,22 @@ void SmartBoiler::on_set_hdo_enabled(const std::string &payload) {
   this->enqueue_command_(cmd);
 }
 
-void SmartBoiler::on_set_time(int64_t time_adjustment) {
-  ESP_LOGI(TAG, "Adjusting time by: %ld seconds", time_adjustment);
-  auto cmd = SBProtocolRequest(SBC_PACKET_HOME_TIME, this->mPacketUid++);
-  cmd.write_le(uint64_t(time_adjustment));
+void SmartBoiler::on_set_time(int64_t seconds_since_monday) {
+  // Convert seconds since Monday to day.HH:MM:SS format
+  int day = seconds_since_monday / (24 * 3600);
+  int remaining = seconds_since_monday % (24 * 3600);
+  int hour = remaining / 3600;
+  int minute = (remaining % 3600) / 60;
+  int second = remaining % 60;
+  
+  // Format as "d.HH:MM:SS" (e.g., "3.17:20:08" for Thursday 17:20:08)
+  char time_str[16];
+  snprintf(time_str, sizeof(time_str), "%d.%02d:%02d:%02d", day, hour, minute, second);
+  
+  ESP_LOGI(TAG, "Setting water heater time to: %s (%" PRId64 " seconds since Monday)", time_str, seconds_since_monday);
+  
+  auto cmd = SBProtocolRequest(SBC_PACKET_HOME_SETTIME, this->mPacketUid++);
+  cmd.writeString(time_str);
   this->enqueue_command_(cmd);
 }
 
@@ -185,6 +197,9 @@ void SmartBoiler::getInitData() {
   this->request_value(SBPacket::SBC_PACKET_HOME_HSRCSTATE);
   this->request_value(SBPacket::SBC_PACKET_HDO_ONOFF);
   this->request_value(SBPacket::SBC_PACKET_ANODE_VOLTAGE);
+  // Request energy consumption immediately after connection
+  auto cmd = SBProtocolRequest(SBC_PACKET_STATISTICS_GETALL, this->mPacketUid++);
+  this->enqueue_command_(cmd);
 }
 
 void SmartBoiler::update() {
@@ -392,9 +407,21 @@ void SmartBoiler::handle_incoming(const uint8_t *value, uint16_t value_len) {
             sprintf(buffer, "%s, %s (diff: %lld sec)", this->day_to_string(day), time.c_str(), time_difference);
             ESP_LOGD(TAG, "Water heater internal time: %s", buffer);
             
+            // Throttle time adjustments to prevent infinite loop
+            // Only adjust time once every 5 minutes (300000 ms)
+            uint32_t current_millis = millis();
+            uint32_t time_since_last_adjustment = current_millis - this->last_time_adjustment_millis_;
+            const uint32_t TIME_ADJUSTMENT_COOLDOWN = 300000; // 5 minutes
+            
             if (time_difference > TIME_ADJUSTMENT_THRESHOLD || time_difference < -TIME_ADJUSTMENT_THRESHOLD) {
-              ESP_LOGI(TAG, "Time difference is too large, adjusting time by %lld seconds", time_difference);
-              this->on_set_time(time_difference);
+              if (this->last_time_adjustment_millis_ == 0 || time_since_last_adjustment >= TIME_ADJUSTMENT_COOLDOWN) {
+                ESP_LOGI(TAG, "Time difference is too large (diff: %lld sec), setting water heater time to match ESPHome", time_difference);
+                this->on_set_time(current_seconds_since_monday);
+                this->last_time_adjustment_millis_ = current_millis;
+              } else {
+                ESP_LOGD(TAG, "Time adjustment throttled (last adjustment %lu ms ago, cooldown: %lu ms)", 
+                        time_since_last_adjustment, TIME_ADJUSTMENT_COOLDOWN);
+              }
             }
           } else {
             ESP_LOGW(TAG, "Current time not available from ESPHome time component");

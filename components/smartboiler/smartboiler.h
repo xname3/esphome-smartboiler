@@ -93,6 +93,8 @@ class SmartBoiler : public PollingComponent,
   // incremental counter for packets which requires unique ID
   uint32_t mPacketUid = 1;
   uint32_t last_command_timestamp_;
+  // timestamp of last time adjustment to prevent repeated adjustments
+  uint32_t last_time_adjustment_millis_ = 0;
 
   // Handle for outgoing requests
   uint16_t char_handle_;
