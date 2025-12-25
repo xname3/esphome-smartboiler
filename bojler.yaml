@@ -46,6 +46,11 @@ ota:
   - platform: esphome
     password: !secret ota_password
 
+button:
+  - platform: restart
+    name: "ESP Restart"
+    entity_category: diagnostic
+
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
@@ -93,7 +98,7 @@ external_components:
 smartboiler:
   id: boiler_ctrl
   ble_client_id: ble_boiler
-  update_interval: 600s
+  update_interval: 120s
   time_id: sntp_time
   temp1:
     name: "Temperature 1"

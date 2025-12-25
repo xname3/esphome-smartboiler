@@ -72,7 +72,7 @@ void SmartBoiler::send_to_boiler(SBProtocolRequest request) {
                                          ESP_GATT_WRITE_TYPE_NO_RSP, ESP_GATT_AUTH_REQ_NONE);
 
   if (status)
-    ESP_LOGW(TAG, "[%s] esp_ble_gattc_write_char failed, status=%d", this->parent_->address_str().c_str(), status);
+    ESP_LOGW(TAG, "[%s] esp_ble_gattc_write_char failed, status=%d", this->parent_->address_str(), status);
 }
 
 void SmartBoiler::on_set_temperature(uint8_t temp) {
@@ -127,12 +127,12 @@ void SmartBoiler::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t 
   switch (event) {
     case ESP_GATTC_OPEN_EVT: {
       if (param->open.status == ESP_GATT_OK) {
-        ESP_LOGI(TAG, "[%s] Connected", this->parent_->address_str().c_str());
+        ESP_LOGI(TAG, "[%s] Connected", this->parent_->address_str());
       }
       break;
     }
     case ESP_GATTC_DISCONNECT_EVT: {
-      ESP_LOGI(TAG, "[%s] Disconnected", this->parent_->address_str().c_str());
+      ESP_LOGI(TAG, "[%s] Disconnected", this->parent_->address_str());
       this->set_state(ConnectionState::DISCONNECTED);
       break;
     }
@@ -140,7 +140,7 @@ void SmartBoiler::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t 
       auto chr = this->parent_->get_characteristic(SB_MAIN_SERVICE_UUID, SB_MAIN_CHARACTERISTIC_UUID);
       if (chr == nullptr) {
         ESP_LOGE(TAG, "[%s] No main service found at device, not a SmartBoiler..?",
-                 this->parent_->address_str().c_str());
+                 this->parent_->address_str());
         this->parent_->disconnect();
         break;
       }
@@ -151,7 +151,7 @@ void SmartBoiler::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t 
 
       if (chr == nullptr) {
         ESP_LOGE(TAG, "[%s] No logging service found at device, not a SmartBoiler..?",
-                 this->parent_->address_str().c_str());
+                 this->parent_->address_str());
         this->parent_->disconnect();
         break;
       }
@@ -204,6 +204,17 @@ void SmartBoiler::getInitData() {
 
 void SmartBoiler::update() {
   if (this->state_ == ConnectionState::CONNECTED) {
+    ESP_LOGD(TAG, "Requesting periodic data");
+    // Fast-changing runtime values
+    this->request_value(SBPacket::SBC_PACKET_HOME_MODE);
+    this->request_value(SBPacket::SBC_PACKET_HOME_SENSOR1);
+    this->request_value(SBPacket::SBC_PACKET_HOME_SENSOR2);
+    this->request_value(SBPacket::SBC_PACKET_HOME_HSRCSTATE);
+    // Nice to keep in sync as well
+    this->request_value(SBPacket::SBC_PACKET_HOME_TEMPERATURE);
+    this->request_value(SBPacket::SBC_PACKET_HDO_ONOFF);
+
+    // Slower-changing diagnostics/statistics
     ESP_LOGD(TAG, "Requesting consumption");
     auto cmd = SBProtocolRequest(SBC_PACKET_STATISTICS_GETALL, this->mPacketUid++);
     this->enqueue_command_(cmd);
@@ -313,21 +324,24 @@ void SmartBoiler::handle_incoming(const uint8_t *value, uint16_t value_len) {
     case SBPacket::SBC_PACKET_HOME_TEMPERATURE: {
       auto tempOpt = parse_number<float>(result.mString);
       if (tempOpt.has_value()) {
-        this->thermostat_->publish_target_temp(*tempOpt);
+        if (this->thermostat_)
+          this->thermostat_->publish_target_temp(*tempOpt);
       }
       break;
     }
     case SBPacket::SBC_PACKET_HOME_SENSOR1: {
       auto tempOpt = parse_number<float>(result.mString);
       if (tempOpt.has_value()) {
-        this->temperature_sensor_1_sensor_->publish_state(*tempOpt);
+        if (this->temperature_sensor_1_sensor_)
+          this->temperature_sensor_1_sensor_->publish_state(*tempOpt);
       }
       break;
     }
     case SBPacket::SBC_PACKET_HOME_SENSOR2: {
       auto tempOpt = parse_number<float>(result.mString);
       if (tempOpt.has_value()) {
-        this->temperature_sensor_2_sensor_->publish_state(*tempOpt);
+        if (this->temperature_sensor_2_sensor_)
+          this->temperature_sensor_2_sensor_->publish_state(*tempOpt);
         if (this->thermostat_)
           this->thermostat_->publish_current_temp(*tempOpt);
       }
@@ -335,21 +349,32 @@ void SmartBoiler::handle_incoming(const uint8_t *value, uint16_t value_len) {
     }
     case SBPacket::SBC_PACKET_HOME_HSRCSTATE: {
       auto heatOpt = parse_number<int>(result.mString);
-      auto is_heating = *heatOpt == 1;
-      this->heat_on_sensor_->publish_state(is_heating);
-      if (thermostat_)
+      if (!heatOpt.has_value()) {
+        ESP_LOGW(TAG, "Bad heating state string from water heater: %s", result.mString.c_str());
+        break;
+      }
+      auto is_heating = heatOpt.value() == 1;
+      if (this->heat_on_sensor_)
+        this->heat_on_sensor_->publish_state(is_heating);
+      if (this->thermostat_)
         this->thermostat_->publish_action(is_heating);
       break;
     }
     case SBPacket::SBC_PACKET_HDO_ONOFF: {
       auto hdoOpt = parse_number<int>(result.mString);
+      if (!hdoOpt.has_value()) {
+        ESP_LOGW(TAG, "Bad HDO string from water heater: %s", result.mString.c_str());
+        break;
+      }
       this->isHdoEnabled = hdoOpt.value() == 1;
-      this->hdo_low_tariff_sensor_->publish_state(this->isHdoEnabled);
+      if (this->hdo_low_tariff_sensor_)
+        this->hdo_low_tariff_sensor_->publish_state(this->isHdoEnabled);
       ESP_LOGI(TAG, "Internal HDO decoder is %s.", this->isHdoEnabled ? "enabled" : "disabled");
       break;
     }
     case SBPacket::SBC_PACKET_HOME_BOILERNAME: {
-      this->name_->publish_state(result.mString);
+      if (this->name_)
+        this->name_->publish_state(result.mString);
       break;
     }
     case SBPacket::SBC_PACKET_HOME_ERROR: {
@@ -360,6 +385,10 @@ void SmartBoiler::handle_incoming(const uint8_t *value, uint16_t value_len) {
     case SBPacket::SBC_PACKET_ANODE_VOLTAGE: {
       ESP_LOGD(TAG, "Anode voltage: %s", result.mString.c_str());
       auto voltageValue = parse_number<float>(result.mString);
+      if (!voltageValue.has_value()) {
+        ESP_LOGW(TAG, "Bad anode voltage string from water heater: %s", result.mString.c_str());
+        break;
+      }
       auto voltage = voltageValue.value() / 1000.0;
       if (this->anode_voltage_sensor_)
         this->anode_voltage_sensor_->publish_state(voltage);
